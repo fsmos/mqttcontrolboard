@@ -4,14 +4,17 @@
 
 #include <WiFi.h>
 #include <MQTT.h>
-
+#include "time.h"
 #include "Nextion.h"
 WiFiClient net;
 MQTTClient client;
 
 //https://nextion.ca/portfolio-items/nextion-iteadlib-and-esp32-step-by-step/
-//RX RX2
-//TX TX2
+//RX RX2 yellow
+//TX TX2 blue
+const long gmtOffset_sec = 10800;
+const int daylightOffset_sec = 3600;
+
 NexPage main = NexPage(0, 0, "main");
 NexNumber main_tu = NexNumber(0, 10, "tu");
 NexNumber main_th = NexNumber(0, 11, "th");
@@ -31,7 +34,7 @@ NexDSButton cfg_osl = NexDSButton(1, 4, "osl");
 NexDSButton cfg_gen = NexDSButton(1, 10, "gen");
 
 NexTouch *nex_listen_list[] = {
-    &cfg_uhf, &cfg_hf, &cfg_lbp10a, &cfg_lbp1, &cfg_lbp2, &cfg_comp, &cfg_osl, &cfg_gen, NULL};
+    &cfg_uhf, &cfg_hf, &cfg_lbp10a, &cfg_lbp1, &cfg_lbp2, &cfg_comp, &cfg_osl, &cfg_gen, &cfg_tlbp, NULL};
 unsigned long lastMillis = 0;
 
 void connect()
@@ -42,7 +45,7 @@ void connect()
     Serial.print(".");
     delay(1000);
   }
-
+  configTime(gmtOffset_sec, daylightOffset_sec, ntpServer);
   Serial.print("\nconnecting...");
   while (!client.connect("esp32_sergei_controlstol", mqttlogin, mqttpassword))
   {
@@ -116,7 +119,7 @@ void connect()
   {
     Serial.println("NoSubscribe L8");
   }
-    if (client.subscribe("Zigbee1030/0x00158D00040D381D/state_l1"))
+  if (client.subscribe("Zigbee1030/0x00158D00040D381D/state_l1"))
   {
     Serial.println("Subscribe L9");
   }
@@ -222,7 +225,7 @@ void messageReceived(String &topic, String &payload)
       cfg_hf.setValue(0);
     }
   }
-   if (topic == "Zigbee1030/0x00158D00040D381D/state_l1")
+  if (topic == "Zigbee1030/0x00158D00040D381D/state_l1")
   {
     if (payload == "ON")
     {
@@ -235,19 +238,19 @@ void messageReceived(String &topic, String &payload)
   }
   if (topic == "Zigbee1030/0x00124B0022027AEC/pressure")
   {
-     main_pr.setValue((uint32_t)(payload.toFloat()*0.75006156130264));
+    main_pr.setValue((uint32_t)(payload.toFloat() * 0.75006156130264));
   }
   if (topic == "Zigbee1030/0x00124B0022027AEC/temperature")
   {
-     main_th.setValue((uint32_t)(payload.toFloat()));
+    main_th.setValue((uint32_t)(payload.toFloat()));
   }
   if (topic == "Zigbee1030/0x00124B0022027AEC/humidity")
   {
-     main_hm.setValue((uint32_t)(payload.toFloat()));
+    main_hm.setValue((uint32_t)(payload.toFloat()));
   }
-   if (topic == "Zigbee1030/0x00158D0004641AB1/temperature")
+  if (topic == "Zigbee1030/0x00158D0004641AB1/temperature")
   {
-     main_tu.setValue((uint32_t)(payload.toFloat()));
+    main_tu.setValue((uint32_t)(payload.toFloat()));
   }
 }
 
@@ -335,7 +338,6 @@ void cfg_gen_Press(void *ptr)
   }
 }
 
-
 void cfg_uhf_Press(void *ptr)
 {
   uint32_t val = 0;
@@ -370,17 +372,17 @@ void cfg_comp_Press(void *ptr)
   cfg_comp.getValue(&val);
   if (val == 1)
   {
-    client.publish("Zigbee1030/0x00158D00040D381D/state_l1", "ON");
+    client.publish("Zigbee1030/0x00158D00040D381D/set/state_l1", "ON");
   }
   else
   {
-    client.publish("Zigbee1030/0x00158D00040D381D/state_l1", "OFF");
+    client.publish("Zigbee1030/0x00158D00040D381D/set/state_l1", "OFF");
   }
 }
 
-
 void setup()
 {
+  nexInit();
   Serial.begin(115200);
   WiFi.begin(ssid, pass);
 
@@ -398,10 +400,11 @@ void setup()
   cfg_gen.attachPop(cfg_gen_Press, &cfg_gen);
   cfg_uhf.attachPop(cfg_uhf_Press, &cfg_uhf);
   cfg_hf.attachPop(cfg_hf_Press, &cfg_hf);
-  cfg_comp.attachPop(cfg_hf_Press, &cfg_comp);
+  cfg_comp.attachPop(cfg_comp_Press, &cfg_comp);
   //client.publish("Zigbee0EF8/0x00124B002258EA7E/set/state_l1","ON");
 }
-
+int cnt = 0;
+;
 void loop()
 {
   client.loop();
@@ -412,4 +415,17 @@ void loop()
     connect();
   }
   nexLoop(nex_listen_list);
+  if (cnt == 10000)
+  {
+    struct tm timeinfo;
+    if (!getLocalTime(&timeinfo))
+    {
+      Serial.println("Failed to obtain time");
+    }
+
+    main_t1.setValue(timeinfo.tm_hour);
+    main_t2.setValue(timeinfo.tm_min);
+    cnt = 0;
+  } 
+  cnt++;
 }
