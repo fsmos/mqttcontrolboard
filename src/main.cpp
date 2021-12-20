@@ -9,6 +9,9 @@
 WiFiClient net;
 MQTTClient client;
 
+//https://nextion.ca/portfolio-items/nextion-iteadlib-and-esp32-step-by-step/
+//RX RX2
+//TX TX2
 NexPage main = NexPage(0, 0, "main");
 NexNumber main_tu = NexNumber(0, 10, "tu");
 NexNumber main_th = NexNumber(0, 11, "th");
